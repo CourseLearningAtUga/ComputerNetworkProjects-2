@@ -77,7 +77,9 @@ int ParseHeader(int sock){
     return  bytes_received ;
 
 }
-void runHttp(char *domain_passed,char *path_passed,char *outputfile){
+
+//***************************************************************************************************************************//
+void runHttp(char *domain_passed,char *path_passed,char *outputfile,int rangestart,int rangeend){
 char *domain = domain_passed;
 char *path=path_passed; 
 
@@ -85,8 +87,7 @@ char *path=path_passed;
     char send_data[1024],recv_data[1024], *p;
     struct sockaddr_in server_addr;
     struct hostent *he;
-
-
+   
     he = gethostbyname(domain);
     if (he == NULL){
        herror("gethostbyname");
@@ -110,7 +111,7 @@ char *path=path_passed;
 
     printf("Sending data ...\n");
 
-    snprintf(send_data, sizeof(send_data), "GET /%s HTTP/1.1\r\nHost: %s\r\n\r\n", path, domain);
+    snprintf(send_data, sizeof(send_data), "GET /%s HTTP/1.1\r\nHost: %s\r\nRange: bytes=%d-%d\r\n\r\n", path, domain,rangestart,rangeend);
 
     if(send(sock, send_data, strlen(send_data), 0)==-1){
         perror("send");
@@ -135,7 +136,7 @@ char *path=path_passed;
                 exit(3);
             }
 
-
+            
             fwrite(recv_data,1,bytes_received,fd);
             bytes+=bytes_received;
             printf("Bytes recieved: %d from %d\n",bytes,contentlengh);
@@ -145,13 +146,51 @@ char *path=path_passed;
         fclose(fd);
     }
 
-
-
+    
     close(sock);
     printf("\n\nDone.\n\n");
+   
+}
+void mergefiles(char *file1,char *file2,char *file3){
+    FILE *fp1 = fopen(file1, "r");
+   FILE *fp2 = fopen(file2, "r");
+  
+   // Open file to store the result
+   FILE *fp3 = fopen(file3, "wb");
+   char c;
+  
+   if (fp1 == NULL || fp2 == NULL || fp3 == NULL)
+   {
+         puts("Could not open files");
+         exit(0);
+   }
+  
+   // Copy contents of first file to file3.txt
+   while ((c = fgetc(fp1)) != EOF)
+      fputc(c, fp3);
+  
+   // Copy contents of second file to file3.txt
+   while ((c = fgetc(fp2)) != EOF)
+      fputc(c, fp3);
+  
+   printf("Merged file1.txt and file2.txt into file3.txt\n");
+  
+   fclose(fp1);
+   fclose(fp2);
+   fclose(fp3);
 }
 int main(void){
-    char *domain = "cobweb.cs.uga.edu", *path="/~perdisci/CSCI6760-F21/Project2-TestFiles/story_hairydawg_UgaVII.jpg",*outputfile="temp.jpg";
-    runHttp(domain,path,outputfile);
+    char *domain = "cobweb.cs.uga.edu", *path="/~perdisci/CSCI6760-F21/Project2-TestFiles/story_hairydawg_UgaVII.jpg";
+    char *outputfile1="temp.jpg";
+    char *outputfile2="temp2.jpg";
+    char *outputfile3="temp3.jpg";
+    int number_of_chunks=5;
+    int rangestart=0;
+    int rangeend=2000;
+    
+    runHttp(domain,path,outputfile1,rangestart,rangeend);
+    runHttp(domain,path,outputfile2,rangeend+1,rangeend+2001);
+    runHttp(domain,path,outputfile3,rangestart,rangeend+2001);
+    mergefiles(outputfile1,outputfile2,"merge.jpg");
     return 0;
 }
