@@ -1,80 +1,157 @@
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <netinet/in.h>
 #include <netdb.h>
-#define BUFFER_SIZE 4096
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <errno.h>
+#include <string.h>
+#include <errno.h>
+#include <arpa/inet.h>
 
-int create_socket(const char *host, const char *port) {
-    struct addrinfo hints, *res;
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
+#include <string.h>
 
-    if (getaddrinfo(host, port, &hints, &res) != 0) {
-        perror("getaddrinfo");
-        return -1;
+
+int ReadHttpStatus(int sock){
+    char c;
+    char buff[1024]="",*ptr=buff+1;
+    int bytes_received, status;
+    printf("Begin Response ..\n");
+    while(bytes_received = recv(sock, ptr, 1, 0)){
+        if(bytes_received==-1){
+            perror("ReadHttpStatus");
+            exit(1);
+        }
+
+        if((ptr[-1]=='\r')  && (*ptr=='\n' )) break;
+        ptr++;
     }
+    *ptr=0;
+    ptr=buff+1;
 
-    int sockfd = socket(res->ai_family, res->ai_socktype, 0);
-    if (sockfd == -1) {
-        perror("socket");
-        return -1;
-    }
+    sscanf(ptr,"%*s %d ", &status);
 
-    if (connect(sockfd, res->ai_addr, res->ai_addrlen) == -1) {
-        perror("connect");
-        close(sockfd);
-        return -1;
-    }
+    printf("%s\n",ptr);
+    printf("status=%d\n",status);
+    printf("End Response ..\n");
+    return (bytes_received>0)?status:0;
 
-    return sockfd;
 }
 
-void downloadfile(char *httplink,char *filename){
-printf("%s\n",httplink);
-printf("%s\n",filename);
+//the only filed that it parsed is 'Content-Length' 
+int ParseHeader(int sock){
+    char c;
+    char buff[1024]="",*ptr=buff+4;
+    int bytes_received, status;
+    printf("Begin HEADER ..\n");
+    while(bytes_received = recv(sock, ptr, 1, 0)){
+        if(bytes_received==-1){
+            perror("Parse Header");
+            exit(1);
+        }
 
-
-    const char *host =httplink; // Change to the desired host
-    const char *port = "80";          // HTTP port
-
-    int sockfd = create_socket(host, port);
-    if (sockfd == -1) {
-        return 1;
+        if(
+            (ptr[-3]=='\r')  && (ptr[-2]=='\n' ) &&
+            (ptr[-1]=='\r')  && (*ptr=='\n' )
+        ) break;
+        ptr++;
     }
 
-    // HTTP 1.1 GET request
-    const char *request = "GET / HTTP/1.1\r\nwww.google.com\r\n"
-                          "Connection: close"
-                          "Host: \r\n\r\n";
+    *ptr=0;
+    ptr=buff+4;
+    //printf("%s",ptr);
 
-    if (send(sockfd, request, strlen(request), 0) == -1) {
+    if(bytes_received){
+        ptr=strstr(ptr,"Content-Length:");
+        if(ptr){
+            sscanf(ptr,"%*s %d",&bytes_received);
+
+        }else
+            bytes_received=-1; //unknown size
+
+       printf("Content-Length: %d\n",bytes_received);
+    }
+    printf("End HEADER ..\n");
+    return  bytes_received ;
+
+}
+void runHttp(char *domain_passed,char *path_passed,char *outputfile){
+char *domain = domain_passed;
+char *path=path_passed; 
+
+    int sock, bytes_received;  
+    char send_data[1024],recv_data[1024], *p;
+    struct sockaddr_in server_addr;
+    struct hostent *he;
+
+
+    he = gethostbyname(domain);
+    if (he == NULL){
+       herror("gethostbyname");
+       exit(1);
+    }
+
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0))== -1){
+       perror("Socket");
+       exit(1);
+    }
+    server_addr.sin_family = AF_INET;     
+    server_addr.sin_port = htons(80);
+    server_addr.sin_addr = *((struct in_addr *)he->h_addr);
+    bzero(&(server_addr.sin_zero),8); 
+
+    printf("Connecting ...\n");
+    if (connect(sock, (struct sockaddr *)&server_addr,sizeof(struct sockaddr)) == -1){
+       perror("Connect");
+       exit(1); 
+    }
+
+    printf("Sending data ...\n");
+
+    snprintf(send_data, sizeof(send_data), "GET /%s HTTP/1.1\r\nHost: %s\r\n\r\n", path, domain);
+
+    if(send(sock, send_data, strlen(send_data), 0)==-1){
         perror("send");
-        close(sockfd);
-        return 1;
+        exit(2); 
+    }
+    printf("Data sent.\n");  
+
+    //fp=fopen("received_file","wb");
+    printf("Recieving data...\n\n");
+
+    int contentlengh;
+
+    if(ReadHttpStatus(sock) && (contentlengh=ParseHeader(sock))){
+
+        int bytes=0;
+        FILE* fd=fopen(outputfile,"wb");
+        printf("Saving data...\n\n");
+
+        while(bytes_received = recv(sock, recv_data, 1024, 0)){
+            if(bytes_received==-1){
+                perror("recieve");
+                exit(3);
+            }
+
+
+            fwrite(recv_data,1,bytes_received,fd);
+            bytes+=bytes_received;
+            printf("Bytes recieved: %d from %d\n",bytes,contentlengh);
+            if(bytes==contentlengh)
+            break;
+        }
+        fclose(fd);
     }
 
-    char response_buffer[BUFFER_SIZE];
-    int bytes_received;
 
-    while ((bytes_received = recv(sockfd, response_buffer, BUFFER_SIZE - 1, 0)) > 0) {
-        response_buffer[bytes_received] = '\0';
-        printf("%s", response_buffer);
-    }
 
-    close(sockfd);
-
+    close(sock);
+    printf("\n\nDone.\n\n");
 }
-
-
-int main(){
-    char *httplink="https://cobweb.cs.uga.edu/~perdisci/CSCI6760-F21/Project2-TestFiles/topnav-sport2_r1_c1.gif";
-    char *filename="image.gif";
-    int numberofparts=5;
-    downloadfile(httplink,filename);
-    
+int main(void){
+    char *domain = "cobweb.cs.uga.edu", *path="/~perdisci/CSCI6760-F21/Project2-TestFiles/story_hairydawg_UgaVII.jpg",*outputfile="temp.jpg";
+    runHttp(domain,path,outputfile);
     return 0;
 }

@@ -124,7 +124,6 @@ int main() {
 
     char response_buffer[BUFFER_SIZE];
     int bytes_received;
-const char* outputFileName = "output.jpg";
 
     while ((bytes_received = recv(sockfd, response_buffer, BUFFER_SIZE, 0)) > 0) {
         char body[BUFFER_SIZE];
@@ -133,7 +132,7 @@ const char* outputFileName = "output.jpg";
         printf("body: %s \n",body);
     
         fwrite(body, 1, bytes_received, file);
-        binaryStringToJpeg(body, outputFileName);
+        
         fwrite(response_buffer,1,bytes_received,file1);
     }
     // Adjust the buffer size as needed
