@@ -1,5 +1,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #include <stdio.h>
@@ -13,29 +14,7 @@
 
 #include <string.h>
 
-void appendStringToGrowingBuffer(char** growingBuffer, const char* str) {
-    // Calculate the new length of the combined string
-    size_t newLength = strlen(*growingBuffer) + strlen(str);
-    
-    // Allocate memory for the growing buffer
-    char* newBuffer = (char*)malloc(newLength + 1); // +1 for the null-terminator
-    if (newBuffer == NULL) {
-        perror("Memory allocation error");
-        return;
-    }
 
-    // Copy the existing content to the new buffer
-    strcpy(newBuffer, *growingBuffer);
-
-    // Append the new string to the new buffer
-    strcat(newBuffer, str);
-    
-    // Free the old buffer
-    free(*growingBuffer);
-
-    // Update the growing buffer pointer to point to the new buffer
-    *growingBuffer = newBuffer;
-}
 int ReadHttpStatus(int sock){
     char c;
     char buff[1024]="",*ptr=buff+1;
@@ -101,17 +80,15 @@ int ParseHeader(int sock){
 }
 
 //***************************************************************************************************************************//
-char* runHttp(char *domain_passed,char *path_passed,char *outputfile,int rangestart,int rangeend){
+void runHttp(char *domain_passed,char *path_passed,char *outputfile,int rangestart,int rangeend){
 char *domain = domain_passed;
 char *path=path_passed; 
 
     int sock, bytes_received;  
-    char send_data[1024],recv_data[1024], *p,*ret = (char*)malloc(1); // Start with an empty string
-     
+    char send_data[1024],recv_data[1024], *p;
     struct sockaddr_in server_addr;
     struct hostent *he;
-    
-    ret[0] = '\0';
+   
     he = gethostbyname(domain);
     if (he == NULL){
        herror("gethostbyname");
@@ -134,7 +111,7 @@ char *path=path_passed;
     }
 
     printf("Sending data ...\n");
-   
+
     snprintf(send_data, sizeof(send_data), "GET /%s HTTP/1.1\r\nHost: %s\r\nRange: bytes=%d-%d\r\n\r\n", path, domain,rangestart,rangeend);
 
     if(send(sock, send_data, strlen(send_data), 0)==-1){
@@ -152,44 +129,85 @@ char *path=path_passed;
 
         int bytes=0;
         FILE* fd=fopen(outputfile,"wb");
-        FILE* fd2=fopen("temp3.jpg","wb");
         printf("Saving data...\n\n");
-         
+
         while(bytes_received = recv(sock, recv_data, 1024, 0)){
             if(bytes_received==-1){
                 perror("recieve");
                 exit(3);
             }
-            
+
             
             fwrite(recv_data,1,bytes_received,fd);
-            fwrite(recv_data,1,bytes_received,fd2);
-            
-            appendStringToGrowingBuffer(&ret,recv_data);
-            
-           printf("\n\n\n\n============================compstart===========================\n\n\n");
-           int count=0;
-           printf("len and size of recv_data is %ld and %ld\n",sizeof(recv_data),strlen(recv_data));
-           while(count<=100){
-                printf("count %d = %c ",count,recv_data[count]);
-                count++;
-            }
-           printf("\n\n\n\n============================compmid===========================\n\n\n");
-            printf("%s",recv_data);
-             printf("\n\n\n\n============================compend1===========================\n\n\n");
             bytes+=bytes_received;
-            // printf("Bytes recieved: %d from %d\n",bytes,contentlengh);
+            printf("Bytes recieved: %d from %d\n",bytes,contentlengh);
             if(bytes==contentlengh)
             break;
         }
         fclose(fd);
-        fclose(fd2);
     }
 
-
+    
+    close(sock);
     printf("\n\nDone.\n\n");
-    return ret;
+   
 }
+
+void mergeFiles(const char *file1_path, const char *file2_path, const char *output_path) {
+    FILE *file1, *file2, *output;
+    struct stat st1,st2;
+
+    char ch;
+
+    // Open the first binary file for reading
+    file1 = fopen(file1_path, "rb");
+    if (file1 == NULL) {
+        perror("Error opening file1");
+        exit(EXIT_FAILURE);
+    }
+
+    // Open the second binary file for reading
+    file2 = fopen(file2_path, "rb");
+    if (file2 == NULL) {
+        perror("Error opening file2");
+        fclose(file1);
+        exit(EXIT_FAILURE);
+    }
+
+    // Open the output binary file for writing
+    output = fopen(output_path, "wb");
+    if (output == NULL) {
+        perror("Error opening output file");
+        fclose(file1);
+        fclose(file2);
+        exit(EXIT_FAILURE);
+    }
+    fstat(fileno(file1), &st1);//read the size of the files
+    fstat(fileno(file2), &st2);//read the size of the files
+    
+    char *buffer1 = malloc(st1.st_size);
+    char *buffer2 = malloc(st2.st_size);
+    
+    // Copy data from the first file to the output file
+    fread(buffer1, 1, st1.st_size, file1);
+    fwrite(buffer1,st1.st_size,1,output);
+    fread(buffer2, 1, st2.st_size, file1);
+    fwrite(buffer2,st2.st_size,1,output);
+
+    // Copy data from the second file to the output file
+    // while ((ch = fgetc(file2)) != EOF) {
+    //     fread(buffer,sizeof(buffer),1,file1);
+    //     fwrite(buffer,sizeof(buffer),1,output);
+    // }
+
+    // Close all files
+    fclose(file1);
+    fclose(file2);
+    fclose(output);
+
+    printf("Files merged successfully.\n");
+}
+
 
 int main(void){
     char *domain = "cobweb.cs.uga.edu", *path="/~perdisci/CSCI6760-F21/Project2-TestFiles/story_hairydawg_UgaVII.jpg";
@@ -198,9 +216,17 @@ int main(void){
     char *outputfile3="temp3.jpg";
     int number_of_chunks=5;
     int rangestart=0;
-    int rangeend=2000;
+    int rangeend=10000;
     
     runHttp(domain,path,outputfile1,rangestart,rangeend);
-    
+    runHttp(domain,path,outputfile2,rangeend+1,rangeend+20001);
+    // runHttp(domain,path,outputfile3,rangestart,rangeend+2001);
+    // mergefiles(outputfile1,outputfile2,"merge.jpg");
+    // mergeFiles(outputfile1,outputfile2,outputfile3);
+    char mergebuf[1024];
+    snprintf(mergebuf, sizeof(mergebuf),"cat %s %s > %s",outputfile1,outputfile2,outputfile3);
+    system(mergebuf);
+
+     
     return 0;
 }
