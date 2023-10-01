@@ -20,12 +20,50 @@
 
 
 //*****************************************************helpler functions *************************************************//
+char* integerToString(int num) {
+    // Determine the maximum number of digits an integer can have (including sign and null terminator)
+    int max_digits = snprintf(NULL, 0, "%d", num) + 1;
+
+    // Allocate memory for the string
+    char *str = (char *)malloc(max_digits);
+
+    if (str == NULL) {
+        fprintf(stderr, "Memory allocation failed.\n");
+        exit(1);
+    }
+
+    // Convert the integer to a string
+    sprintf(str, "%d", num);
+
+    return str;
+}
 
 void appendToEndOfOutputFile(const char *file1_path, const char *output_path) {
     char mergebuf[1024];
     snprintf(mergebuf, sizeof(mergebuf),"cat %s >> %s",file1_path,output_path);
     system(mergebuf);
     printf("Files merged successfully.\n");
+}
+char* concatenateStrings(const char *str1, const char *str2) {
+    // Calculate the total length of the resulting string
+    size_t total_length = strlen(str1) + strlen(str2) + 1; // +1 for the null terminator
+
+    // Allocate memory for the resulting string
+    char *result = (char *)malloc(total_length);
+
+    // Check if memory allocation was successful
+    if (result == NULL) {
+        fprintf(stderr, "Memory allocation failed.\n");
+        exit(1);
+    }
+
+    // Copy the first string to the result
+    strcpy(result, str1);
+
+    // Concatenate the second string to the result
+    strcat(result, str2);
+
+    return result;
 }
 
 //*****************************************************helpler functions end*************************************************//
@@ -130,8 +168,6 @@ int DownloadOnlyHeadersForContentLength(int sock,char *domain_passed,char *path_
 
         }else
             bytes_received=-1; //unknown size
-
-       printf("Content-Length: %d\n",bytes_received);
     }
     
     return  bytes_received ;
@@ -176,7 +212,7 @@ void runHttp(int sock,char *domain_passed,char *path_passed,char *outputfile,int
             
             fwrite(recv_data,1,bytes_received,fd);
             bytes+=bytes_received;
-            printf("Bytes recieved: %d from %d\n",bytes,contentlengh);
+            // printf("Bytes recieved: %d from %d\n",bytes,contentlengh);
             if(bytes==contentlengh)
             break;
         }
@@ -223,29 +259,61 @@ char *path=path_passed;
 
 int main(void){
     char *domain = "cobweb.cs.uga.edu", *path="/~perdisci/CSCI6760-F21/Project2-TestFiles/story_hairydawg_UgaVII.jpg";
-    char *outputfile1="temp.jpg";
-    char *outputfile2="temp2.jpg";
-    char *outputfile3="final.jpg";
+    char *filename="part_";
+    char *outputfile="final.jpg";
     int number_of_parts=5;
-    int rangestart=0;
-    int rangeend=10000;
+    char filenames[number_of_parts][256];
+
+    // int rangestart=0;
+    // int rangeend=10000;
+
+
     int mainsock0=createSocket(domain,path);
-    printf("%d\n",DownloadOnlyHeadersForContentLength(mainsock0,domain,path));
-    printf("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++1\n");
-    int mainsock1=createSocket(domain,path);
-    runHttp(mainsock1,domain,path,outputfile1,rangestart,rangeend);
-    close(mainsock1);
-    printf("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++2\n");
+    int contentlength=DownloadOnlyHeadersForContentLength(mainsock0,domain,path);
+    close(mainsock0);
+    printf("Content-Length= %d\n",contentlength);
+    printf("each partsize is %d\n",contentlength/number_of_parts);
+    int sizeofeachchunk=contentlength/number_of_parts;
+    printf("value of %s\n",integerToString(1));
+    int rangest=0;
+    int rangeend=sizeofeachchunk;
+    int count=1;
+    while(count<number_of_parts){
+        int mainsock1=createSocket(domain,path);
+        strcpy(filenames[count-1], concatenateStrings(filename, integerToString(count)));
+        runHttp(mainsock1,domain,path,filenames[count-1],rangest,rangeend);//download the first few pieces
+        close(mainsock1);
+        count++;
+        rangest=rangeend+1;
+        rangeend=rangest+sizeofeachchunk;
+        
+    }
     int mainsock2=createSocket(domain,path);
-    runHttp(mainsock2,domain,path,outputfile2,rangeend+1,rangeend+30001);
+    
+    strcpy(filenames[count-1], concatenateStrings(filename, integerToString(count)));
+    runHttp(mainsock2,domain,path,filenames[count-1],rangest,contentlength);//in the last run download everything
     close(mainsock2);
-    printf("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++3\n");
+
+    printf("value= %d\n",count);
+    for(int i=0;i<number_of_parts;i++){
+        printf("name is %s\n",filenames[i]);
+        appendToEndOfOutputFile(filenames[i], outputfile);
+    }
+    // printf("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++1\n");
+    // int mainsock1=createSocket(domain,path);
+    // runHttp(mainsock1,domain,path,concatenateStrings(filename, atoa(1)),rangestart,rangeend);
+    // close(mainsock1);
+    // printf("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++2\n");
+    // int mainsock2=createSocket(domain,path);
+    // runHttp(mainsock2,domain,path,concatenateStrings(filename, atoa(2)),rangeend+1,rangeend+30001);
+    // close(mainsock2);
+    // printf("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++3\n");
     
     // runHttp(domain,path,outputfile3,rangestart,rangeend+2001);
     // mergefiles(outputfile1,outputfile2,"merge.jpg");
     // mergeFiles(outputfile1,outputfile2,outputfile3);
-    appendToEndOfOutputFile(outputfile1, outputfile3);    
-    appendToEndOfOutputFile(outputfile2, outputfile3);
+    // appendToEndOfOutputFile(concatenateStrings(filename, atoa(1)), outputfile);    
+    // appendToEndOfOutputFile(concatenateStrings(filename, atoa(2)), outputfile);
     
     return 0;
 }
