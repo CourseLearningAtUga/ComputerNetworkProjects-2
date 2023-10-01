@@ -13,7 +13,29 @@
 
 #include <string.h>
 
+void appendStringToGrowingBuffer(char** growingBuffer, const char* str) {
+    // Calculate the new length of the combined string
+    size_t newLength = strlen(*growingBuffer) + strlen(str);
+    
+    // Allocate memory for the growing buffer
+    char* newBuffer = (char*)malloc(newLength + 1); // +1 for the null-terminator
+    if (newBuffer == NULL) {
+        perror("Memory allocation error");
+        return;
+    }
 
+    // Copy the existing content to the new buffer
+    strcpy(newBuffer, *growingBuffer);
+
+    // Append the new string to the new buffer
+    strcat(newBuffer, str);
+    
+    // Free the old buffer
+    free(*growingBuffer);
+
+    // Update the growing buffer pointer to point to the new buffer
+    *growingBuffer = newBuffer;
+}
 int ReadHttpStatus(int sock){
     char c;
     char buff[1024]="",*ptr=buff+1;
@@ -79,15 +101,17 @@ int ParseHeader(int sock){
 }
 
 //***************************************************************************************************************************//
-void runHttp(char *domain_passed,char *path_passed,char *outputfile,int rangestart,int rangeend){
+char* runHttp(char *domain_passed,char *path_passed,char *outputfile,int rangestart,int rangeend){
 char *domain = domain_passed;
 char *path=path_passed; 
 
     int sock, bytes_received;  
-    char send_data[1024],recv_data[1024], *p;
+    char send_data[1024],recv_data[1024], *p,*ret = (char*)malloc(1); // Start with an empty string
+     
     struct sockaddr_in server_addr;
     struct hostent *he;
-   
+    
+    ret[0] = '\0';
     he = gethostbyname(domain);
     if (he == NULL){
        herror("gethostbyname");
@@ -110,7 +134,7 @@ char *path=path_passed;
     }
 
     printf("Sending data ...\n");
-
+   
     snprintf(send_data, sizeof(send_data), "GET /%s HTTP/1.1\r\nHost: %s\r\nRange: bytes=%d-%d\r\n\r\n", path, domain,rangestart,rangeend);
 
     if(send(sock, send_data, strlen(send_data), 0)==-1){
@@ -128,57 +152,45 @@ char *path=path_passed;
 
         int bytes=0;
         FILE* fd=fopen(outputfile,"wb");
+        FILE* fd2=fopen("temp3.jpg","wb");
         printf("Saving data...\n\n");
-
+         
         while(bytes_received = recv(sock, recv_data, 1024, 0)){
             if(bytes_received==-1){
                 perror("recieve");
                 exit(3);
             }
-
+            
             
             fwrite(recv_data,1,bytes_received,fd);
+            fwrite(recv_data,1,bytes_received,fd2);
+            
+            appendStringToGrowingBuffer(&ret,recv_data);
+            
+           printf("\n\n\n\n============================compstart===========================\n\n\n");
+           int count=0;
+           printf("len and size of recv_data is %ld and %ld\n",sizeof(recv_data),strlen(recv_data));
+           while(count<=100){
+                printf("count %d = %c ",count,recv_data[count]);
+                count++;
+            }
+           printf("\n\n\n\n============================compmid===========================\n\n\n");
+            printf("%s",recv_data);
+             printf("\n\n\n\n============================compend1===========================\n\n\n");
             bytes+=bytes_received;
-            printf("Bytes recieved: %d from %d\n",bytes,contentlengh);
+            // printf("Bytes recieved: %d from %d\n",bytes,contentlengh);
             if(bytes==contentlengh)
             break;
         }
         fclose(fd);
+        fclose(fd2);
     }
 
-    
-    close(sock);
+
     printf("\n\nDone.\n\n");
-   
+    return ret;
 }
-void mergefiles(char *file1,char *file2,char *file3){
-    FILE *fp1 = fopen(file1, "r");
-   FILE *fp2 = fopen(file2, "r");
-  
-   // Open file to store the result
-   FILE *fp3 = fopen(file3, "wb");
-   char c;
-  
-   if (fp1 == NULL || fp2 == NULL || fp3 == NULL)
-   {
-         puts("Could not open files");
-         exit(0);
-   }
-  
-   // Copy contents of first file to file3.txt
-   while ((c = fgetc(fp1)) != EOF)
-      fputc(c, fp3);
-  
-   // Copy contents of second file to file3.txt
-   while ((c = fgetc(fp2)) != EOF)
-      fputc(c, fp3);
-  
-   printf("Merged file1.txt and file2.txt into file3.txt\n");
-  
-   fclose(fp1);
-   fclose(fp2);
-   fclose(fp3);
-}
+
 int main(void){
     char *domain = "cobweb.cs.uga.edu", *path="/~perdisci/CSCI6760-F21/Project2-TestFiles/story_hairydawg_UgaVII.jpg";
     char *outputfile1="temp.jpg";
@@ -189,8 +201,6 @@ int main(void){
     int rangeend=2000;
     
     runHttp(domain,path,outputfile1,rangestart,rangeend);
-    runHttp(domain,path,outputfile2,rangeend+1,rangeend+2001);
-    runHttp(domain,path,outputfile3,rangestart,rangeend+2001);
-    mergefiles(outputfile1,outputfile2,"merge.jpg");
+    
     return 0;
 }
