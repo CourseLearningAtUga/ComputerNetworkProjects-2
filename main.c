@@ -153,58 +153,60 @@ char *path=path_passed;
    
 }
 
-void mergeFiles(const char *file1_path, const char *file2_path, const char *output_path) {
-    FILE *file1, *file2, *output;
-    struct stat st1,st2;
+void appendToEndOfOutputFile(const char *file1_path, const char *output_path) {
+    // FILE *file1, *file2, *output;
+    // struct stat st1,st2;
 
-    char ch;
+    // char ch;
 
-    // Open the first binary file for reading
-    file1 = fopen(file1_path, "rb");
-    if (file1 == NULL) {
-        perror("Error opening file1");
-        exit(EXIT_FAILURE);
-    }
-
-    // Open the second binary file for reading
-    file2 = fopen(file2_path, "rb");
-    if (file2 == NULL) {
-        perror("Error opening file2");
-        fclose(file1);
-        exit(EXIT_FAILURE);
-    }
-
-    // Open the output binary file for writing
-    output = fopen(output_path, "wb");
-    if (output == NULL) {
-        perror("Error opening output file");
-        fclose(file1);
-        fclose(file2);
-        exit(EXIT_FAILURE);
-    }
-    fstat(fileno(file1), &st1);//read the size of the files
-    fstat(fileno(file2), &st2);//read the size of the files
-    
-    char *buffer1 = malloc(st1.st_size);
-    char *buffer2 = malloc(st2.st_size);
-    
-    // Copy data from the first file to the output file
-    fread(buffer1, 1, st1.st_size, file1);
-    fwrite(buffer1,st1.st_size,1,output);
-    fread(buffer2, 1, st2.st_size, file1);
-    fwrite(buffer2,st2.st_size,1,output);
-
-    // Copy data from the second file to the output file
-    // while ((ch = fgetc(file2)) != EOF) {
-    //     fread(buffer,sizeof(buffer),1,file1);
-    //     fwrite(buffer,sizeof(buffer),1,output);
+    // // Open the first binary file for reading
+    // file1 = fopen(file1_path, "rb");
+    // if (file1 == NULL) {
+    //     perror("Error opening file1");
+    //     exit(EXIT_FAILURE);
     // }
 
-    // Close all files
-    fclose(file1);
-    fclose(file2);
-    fclose(output);
+    // // Open the second binary file for reading
+    // file2 = fopen(file2_path, "rb");
+    // if (file2 == NULL) {
+    //     perror("Error opening file2");
+    //     fclose(file1);
+    //     exit(EXIT_FAILURE);
+    // }
 
+    // // Open the output binary file for writing
+    // output = fopen(output_path, "wb");
+    // if (output == NULL) {
+    //     perror("Error opening output file");
+    //     fclose(file1);
+    //     fclose(file2);
+    //     exit(EXIT_FAILURE);
+    // }
+    // fstat(fileno(file1), &st1);//read the size of the files
+    // fstat(fileno(file2), &st2);//read the size of the files
+    
+    // char *buffer1 = malloc(st1.st_size);
+    // char *buffer2 = malloc(st2.st_size);
+    
+    // // Copy data from the first file to the output file
+    // fread(buffer1, 1, st1.st_size, file1);
+    // fwrite(buffer1,st1.st_size,1,output);
+    // fread(buffer2, 1, st2.st_size, file1);
+    // fwrite(buffer2,st2.st_size,1,output);
+
+    // // Copy data from the second file to the output file
+    // // while ((ch = fgetc(file2)) != EOF) {
+    // //     fread(buffer,sizeof(buffer),1,file1);
+    // //     fwrite(buffer,sizeof(buffer),1,output);
+    // // }
+
+    // // Close all files
+    // fclose(file1);
+    // fclose(file2);
+    // fclose(output);
+    char mergebuf[1024];
+    snprintf(mergebuf, sizeof(mergebuf),"cat %s >> %s",file1_path,output_path);
+    system(mergebuf);
     printf("Files merged successfully.\n");
 }
 
@@ -223,10 +225,8 @@ int main(void){
     // runHttp(domain,path,outputfile3,rangestart,rangeend+2001);
     // mergefiles(outputfile1,outputfile2,"merge.jpg");
     // mergeFiles(outputfile1,outputfile2,outputfile3);
-    char mergebuf[1024];
-    snprintf(mergebuf, sizeof(mergebuf),"cat %s %s > %s",outputfile1,outputfile2,outputfile3);
-    system(mergebuf);
-
+    appendToEndOfOutputFile(outputfile1, outputfile3);    
+    appendToEndOfOutputFile(outputfile2, outputfile3);
      
     return 0;
 }
