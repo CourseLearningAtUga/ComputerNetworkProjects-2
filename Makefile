@@ -9,4 +9,5 @@ main.o: main.c
 
 clean:
 	rm -rf http_downloader main.o
+	rm *.jpg
 
