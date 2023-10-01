@@ -283,18 +283,12 @@ int main(void){
     char *outputfile="final.jpg";
     int number_of_parts=5;
     char filenames[number_of_parts][256];
-
-    // int rangestart=0;
-    // int rangeend=10000;
-
-
     int mainsock0=createSocket(domain,path);
     int contentlength=DownloadOnlyHeadersForContentLength(mainsock0,domain,path);
     close(mainsock0);
     printf("Content-Length= %d\n",contentlength);
     printf("each partsize is %d\n",contentlength/number_of_parts);
     int sizeofeachchunk=contentlength/number_of_parts;
-    
     int rangest=0;
     int rangeend=sizeofeachchunk;
     int count=1;
@@ -302,12 +296,9 @@ int main(void){
     struct ThreadArgs args[number_of_parts];
     while(count<number_of_parts){
         strcpy(filenames[count-1], concatenateStrings(filename, integerToString(count)));//create the file name
-
         // int mainsock1=createSocket(domain,path);
         // runHttp(mainsock1,domain,path,filenames[count-1],rangest,rangeend);//download the first few pieces into files
         // close(mainsock1);
-        
-        
         args[count-1].domain=domain;
         args[count-1].path=path;
         args[count-1].smalleroutputfile=filenames[count-1];
