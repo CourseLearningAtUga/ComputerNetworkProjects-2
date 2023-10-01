@@ -221,7 +221,7 @@ void runHttp(int sock,char *domain_passed,char *path_passed,char *outputfile,int
     char *path=path_passed; 
     char send_data[1024],recv_data[1024];
     int bytes_received;  
-    printf("Sending data ...\n");
+    printf("Sending http get request to server range %d and %d ...\n",rangestart,rangeend);
 
     snprintf(send_data, sizeof(send_data), "GET /%s HTTP/1.1\r\nHost: %s\r\nRange: bytes=%d-%d\r\n\r\n", path, domain,rangestart,rangeend);
 
@@ -229,10 +229,10 @@ void runHttp(int sock,char *domain_passed,char *path_passed,char *outputfile,int
         perror("send");
         exit(2); 
     }
-    printf("Data sent.\n");  
+    printf("http request sent for range.%d and %d ...\n",rangestart,rangeend);  
 
     //fp=fopen("received_file","wb");
-    printf("Recieving data...\n\n");
+    printf("Recieving http get request to server range %d and %d ...\n",rangestart,rangeend);
 
     int contentlengh;
 
@@ -260,7 +260,7 @@ void runHttp(int sock,char *domain_passed,char *path_passed,char *outputfile,int
 
     
     
-    printf("\n\nDone.\n\n");
+    printf("done saving the data of  http get request to server range %d and %d ...\n",rangestart,rangeend);
    
 }
 void *wrapperThreadFunction(void *args){
@@ -270,7 +270,7 @@ void *wrapperThreadFunction(void *args){
     char *filename=threadArgs->smalleroutputfile;
     int rangest=threadArgs->rangest;
     int rangeend=threadArgs->rangeend;
-    printf("values =========================================================domaain %s,filename %s ,rangeest %d,rangedn %d\n",domain,filename,rangest,rangeend);
+    // printf("values =========================================================domaain %s,filename %s ,rangeest %d,rangedn %d\n",domain,filename,rangest,rangeend);
     int mainsock1=createSocket(domain,path);
     runHttp(mainsock1,domain,path,filename,rangest,rangeend);//download the first few pieces into files
     close(mainsock1);
@@ -294,7 +294,7 @@ int main(void){
     printf("Content-Length= %d\n",contentlength);
     printf("each partsize is %d\n",contentlength/number_of_parts);
     int sizeofeachchunk=contentlength/number_of_parts;
-    printf("value of %s\n",integerToString(1));
+    
     int rangest=0;
     int rangeend=sizeofeachchunk;
     int count=1;
@@ -332,10 +332,11 @@ int main(void){
     for(int i=0;i<number_of_parts-1;i++){
         pthread_join(thread[i], NULL);
     }
-    
+    printf("\n\n");
     for(int i=0;i<number_of_parts;i++){
-        printf("name is %s\n",filenames[i]);
+        
         appendToEndOfOutputFile(filenames[i], outputfile);
+        printf("%s is merge to the output\n",filenames[i]);
     }
     // printf("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++1\n");
     // int mainsock1=createSocket(domain,path);
