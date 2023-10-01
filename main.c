@@ -4,20 +4,27 @@
 #include <netinet/in.h>
 #include <netdb.h>
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
-#include <string.h>
 #include <errno.h>
 #include <arpa/inet.h>
-
+#include <pthread.h>
 #include <string.h>
 
-
-
 #define PORT_NUMBER 80
-
+//*****************************************************helper structures **************************************************//
+struct ThreadArgs {    
+    char *domain; // Pointer to a string
+    size_t domain_length; // Length of the string
+    char *path;
+    size_t path_length;
+    char *smalleroutputfile;
+    size_t smalleroutputfile_length;
+    int rangest;
+    int rangeend;
+};
+//****************************************************helper structures end************************************************//
 
 //*****************************************************helpler functions *************************************************//
 char* integerToString(int num) {
@@ -177,6 +184,38 @@ int DownloadOnlyHeadersForContentLength(int sock,char *domain_passed,char *path_
 //******************************************************main socket code*********************************************************************//
 
 
+
+int createSocket(char *domain_passed,char *path_passed){
+char *domain = domain_passed;
+char *path=path_passed; 
+
+    int sock;
+    
+    struct sockaddr_in server_addr;
+    struct hostent *he;
+   
+    he = gethostbyname(domain);
+    if (he == NULL){
+       herror("gethostbyname");
+       exit(1);
+    }
+
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0))== -1){
+       perror("Socket");
+       exit(1);
+    }
+    server_addr.sin_family = AF_INET;     
+    server_addr.sin_port = htons(PORT_NUMBER);
+    server_addr.sin_addr = *((struct in_addr *)he->h_addr);
+    bzero(&(server_addr.sin_zero),8); 
+
+    printf("Connecting ...\n");
+    if (connect(sock, (struct sockaddr *)&server_addr,sizeof(struct sockaddr)) == -1){
+       perror("Connect");
+       exit(1); 
+    }
+    return sock;
+}
 void runHttp(int sock,char *domain_passed,char *path_passed,char *outputfile,int rangestart,int rangeend){
     char *domain = domain_passed;
     char *path=path_passed; 
@@ -224,39 +263,20 @@ void runHttp(int sock,char *domain_passed,char *path_passed,char *outputfile,int
     printf("\n\nDone.\n\n");
    
 }
-int createSocket(char *domain_passed,char *path_passed){
-char *domain = domain_passed;
-char *path=path_passed; 
-
-    int sock;
-    
-    struct sockaddr_in server_addr;
-    struct hostent *he;
-   
-    he = gethostbyname(domain);
-    if (he == NULL){
-       herror("gethostbyname");
-       exit(1);
-    }
-
-    if ((sock = socket(AF_INET, SOCK_STREAM, 0))== -1){
-       perror("Socket");
-       exit(1);
-    }
-    server_addr.sin_family = AF_INET;     
-    server_addr.sin_port = htons(PORT_NUMBER);
-    server_addr.sin_addr = *((struct in_addr *)he->h_addr);
-    bzero(&(server_addr.sin_zero),8); 
-
-    printf("Connecting ...\n");
-    if (connect(sock, (struct sockaddr *)&server_addr,sizeof(struct sockaddr)) == -1){
-       perror("Connect");
-       exit(1); 
-    }
-    return sock;
+void *wrapperThreadFunction(void *args){
+    struct ThreadArgs *threadArgs = (struct ThreadArgs *)args;
+    char *domain=threadArgs->domain;
+    char *path=threadArgs->path;
+    char *filename=threadArgs->smalleroutputfile;
+    int rangest=threadArgs->rangest;
+    int rangeend=threadArgs->rangeend;
+    printf("values =========================================================domaain %s,filename %s ,rangeest %d,rangedn %d\n",domain,filename,rangest,rangeend);
+    int mainsock1=createSocket(domain,path);
+    runHttp(mainsock1,domain,path,filename,rangest,rangeend);//download the first few pieces into files
+    close(mainsock1);
+    pthread_exit(NULL);
 }
-
-
+//******************************************************main socket code end*********************************************************************//
 int main(void){
     char *domain = "cobweb.cs.uga.edu", *path="/~perdisci/CSCI6760-F21/Project2-TestFiles/story_hairydawg_UgaVII.jpg";
     char *filename="part_";
@@ -278,23 +298,41 @@ int main(void){
     int rangest=0;
     int rangeend=sizeofeachchunk;
     int count=1;
+    pthread_t thread[number_of_parts];
+    struct ThreadArgs args[number_of_parts];
     while(count<number_of_parts){
-        int mainsock1=createSocket(domain,path);
-        strcpy(filenames[count-1], concatenateStrings(filename, integerToString(count)));
-        runHttp(mainsock1,domain,path,filenames[count-1],rangest,rangeend);//download the first few pieces
-        close(mainsock1);
+        strcpy(filenames[count-1], concatenateStrings(filename, integerToString(count)));//create the file name
+
+        // int mainsock1=createSocket(domain,path);
+        // runHttp(mainsock1,domain,path,filenames[count-1],rangest,rangeend);//download the first few pieces into files
+        // close(mainsock1);
+        
+        
+        args[count-1].domain=domain;
+        args[count-1].path=path;
+        args[count-1].smalleroutputfile=filenames[count-1];
+        args[count-1].rangest=rangest;
+        args[count-1].rangeend=rangeend;
+        // printf("++++++++++++++++++++++++++++++++++++domain %s ,filename %s, rangest %d ,rangedn %d \n",args.domain,args.smalleroutputfile,args.rangest,args.rangeend);
+        if (pthread_create(&thread[count-1], NULL, wrapperThreadFunction, &args[count-1]) != 0) {
+            fprintf(stderr, "Failed to create thread.\n");
+            return 1;
+        }
         count++;
         rangest=rangeend+1;
         rangeend=rangest+sizeofeachchunk;
         
     }
-    int mainsock2=createSocket(domain,path);
     
+    int mainsock2=createSocket(domain,path);
     strcpy(filenames[count-1], concatenateStrings(filename, integerToString(count)));
     runHttp(mainsock2,domain,path,filenames[count-1],rangest,contentlength);//in the last run download everything
     close(mainsock2);
 
-    printf("value= %d\n",count);
+    for(int i=0;i<number_of_parts-1;i++){
+        pthread_join(thread[i], NULL);
+    }
+    
     for(int i=0;i<number_of_parts;i++){
         printf("name is %s\n",filenames[i]);
         appendToEndOfOutputFile(filenames[i], outputfile);
