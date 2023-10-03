@@ -7,10 +7,10 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
-#include <errno.h>
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <string.h>
+#include <openssl/md5.h>
 
 #define PORT_NUMBER 80
 //*****************************************************helper structures **************************************************//
@@ -330,6 +330,32 @@ continue;
 }
 
 //*****************************************************handling input end***********************************************************************//
+//*****************************************************calculating md5 *************************************************************************//
+int calculateFileMD5(const char *filename, unsigned char *digest) {
+    FILE *file = fopen(filename, "rb");
+    if (!file) {
+        perror("Error opening file");
+        return 1;
+    }
+
+    MD5_CTX context;
+    MD5_Init(&context);
+
+    size_t buffer_size = 1024;
+    unsigned char buffer[buffer_size];
+    size_t bytes_read;
+
+    while ((bytes_read = fread(buffer, 1, buffer_size, file))) {
+        MD5_Update(&context, buffer, bytes_read);
+    }
+
+    MD5_Final(digest, &context);
+    fclose(file);
+
+    return 0;
+}
+
+//*****************************************************calculating md5 end *************************************************************************//
 int main(int argc, char *argv[] ){
     
     char *domain = "cobweb.cs.uga.edu", *path="/~perdisci/CSCI6760-F21/Project2-TestFiles/story_hairydawg_UgaVII.jpg";
@@ -381,11 +407,23 @@ int main(int argc, char *argv[] ){
         pthread_join(thread[i], NULL);
     }
     printf("\n\n");
+    
     for(int i=0;i<number_of_parts;i++){
         
         appendToEndOfOutputFile(filenames[i], outputfile);
         printf("%s is merge to the output\n",filenames[i]);
     }
+    printf("\n\n");
+    printf("======================================================================\n");
+    unsigned char digest[MD5_DIGEST_LENGTH];
+    if (calculateFileMD5(outputfile, digest) == 0) {
+        printf("MD5 Hash of %s: ", outputfile);
+        for (int i = 0; i < MD5_DIGEST_LENGTH; i++) {
+            printf("%02x", digest[i]);
+        }
+        printf("\n");
+    }
+    printf("======================================================================\n\n");
     // printf("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++1\n");
     // int mainsock1=createSocket(domain,path);
     // runHttp(mainsock1,domain,path,concatenateStrings(filename, atoa(1)),rangestart,rangeend);
