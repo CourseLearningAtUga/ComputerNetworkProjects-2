@@ -144,13 +144,14 @@ int DownloadOnlyHeadersForContentLength(int sock,char *domain_passed,char *path_
     char *path=path_passed; 
     int bytes_received, status;
     snprintf(send_data, sizeof(send_data), "HEAD /%s HTTP/1.1\r\nHost: %s\r\n\r\n", path, domain);
-
+    printf("++++++++++++++++++++++++++++++++head request+++++++++++++++++++++++++++++\n");
+    printf("%s\n",send_data);
     if(send(sock, send_data, strlen(send_data), 0)==-1){
         perror("send");
         exit(2); 
     }
-    printf("HEAD request sent.\n");  
-    printf("++++++++++++++++++++output of head request+++++++++++++++++++++++++++++\n");
+    printf("++++++++++++++++++++++++++++++++HEAD request sent.+++++++++++++++++++++++++++++++++++\n");  
+    printf("++++++++++++++++++++++++++++++++output of head request+++++++++++++++++++++++++++++\n");
     while(bytes_received = recv(sock, ptr, 1, 0)){
         if(bytes_received==-1){
             perror("Parse Header");
