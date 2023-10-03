@@ -277,11 +277,68 @@ void *wrapperThreadFunction(void *args){
     pthread_exit(NULL);
 }
 //******************************************************main socket code end*********************************************************************//
-int main(void){
+//*****************************************************handling input***********************************************************************//
+
+void splitUrl(const char *url, char **hostName, char **path) {
+    // Find the position of the first "/" after "://"
+    char *slashPtr = strstr(url, "://");
+    
+    if (slashPtr != NULL) {
+        slashPtr += 3; // Move past "://"
+        char *pathPtr = strchr(slashPtr, '/');
+        
+        if (pathPtr != NULL) {
+            // Calculate the length of the host name and path
+            size_t hostNameLength = pathPtr - slashPtr;
+            size_t pathLength = strlen(pathPtr);
+            
+            // Allocate memory for the host name and path
+            *hostName = (char *)malloc(hostNameLength + 1);
+            *path = (char *)malloc(pathLength + 1);
+            
+            // Copy the host name and path
+            strncpy(*hostName, slashPtr, hostNameLength);
+            (*hostName)[hostNameLength] = '\0';
+            
+            strcpy(*path, pathPtr);
+        }
+    }
+}
+
+void setInputsFromArguementsPassed(int argc,char **argv,char **domain,char **path,char *outputfile,int *number_of_parts){
+for(int i=0;i<argc;i++){
+if(strcmp(argv[i],"-u")==0)
+{
+splitUrl(argv[i+1], &(*domain), &(*path));
+i++;
+continue;
+}
+if(strcmp(argv[i],"-n")==0)
+{
+*number_of_parts=atoi(argv[i+1]);
+i++;
+continue;
+}
+if(strcmp(argv[i],"-o")==0)
+{
+    strcpy(outputfile,argv[i+1]);
+i++;
+continue;
+}
+
+}
+}
+
+//*****************************************************handling input end***********************************************************************//
+int main(int argc, char *argv[] ){
+    
     char *domain = "cobweb.cs.uga.edu", *path="/~perdisci/CSCI6760-F21/Project2-TestFiles/story_hairydawg_UgaVII.jpg";
     char *filename="part_";
-    char *outputfile="final.jpg";
+    char outputfile[50];
+    strcpy(outputfile, "fullstichedimage.jpg");
     int number_of_parts=5;
+    setInputsFromArguementsPassed(argc,argv,&domain,&path,outputfile,&number_of_parts);
+    
     char filenames[number_of_parts][256];
     int mainsock0=createSocket(domain,path);
     int contentlength=DownloadOnlyHeadersForContentLength(mainsock0,domain,path);
