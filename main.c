@@ -389,7 +389,7 @@ int main(int argc, char *argv[] ){
         args[count-1].rangest=rangest;
         args[count-1].rangeend=rangeend;
         // printf("++++++++++++++++++++++++++++++++++++domain %s ,filename %s, rangest %d ,rangedn %d \n",args.domain,args.smalleroutputfile,args.rangest,args.rangeend);
-        if (pthread_create(&thread[count-1], NULL, wrapperThreadFunction, &args[count-1]) != 0) {
+        if (pthread_create(&thread[count-1], NULL, wrapperThreadFunction, &args[count-1]) != 0) {//create the thread
             fprintf(stderr, "Failed to create thread.\n");
             return 1;
         }
