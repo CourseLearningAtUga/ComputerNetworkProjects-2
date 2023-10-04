@@ -77,7 +77,7 @@ char* concatenateStrings(const char *str1, const char *str2) {
 
 //*****************************************************helpler functions end*************************************************//
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++helper socket functions***********************************************//
-int ReadHttpStatus(SSL *ssl){
+int ReadHttpsStatus(SSL *ssl){//read https status if it is 206 then range request is success
     char c;
     char buff[1024]="",*ptr=buff+1;
     int bytes_received, status;
@@ -106,7 +106,7 @@ int ReadHttpStatus(SSL *ssl){
 }
 
 //the only filed that it parsed is 'Content-Length' 
-int ParseHeader(SSL *ssl){
+int ParseHeader(SSL *ssl){//read https header and return the content length
     char c;
     char buff[1024]="",*ptr=buff+4;
     int bytes_received, status;
@@ -145,7 +145,7 @@ int ParseHeader(SSL *ssl){
 
 }
 // int DownloadOnlyHeadersForContentLength(int sock,char *domain_passed,char *path_passed){
-int DownloadOnlyHeadersForContentLength(char *domain_passed,char *path_passed){
+int DownloadOnlyHeadersForContentLength(char *domain_passed,char *path_passed){//send a head request over https to find the content length and print the length
     char c,send_data[1024],buff[1024]="",*ptr=buff+4;
     char *domain = domain_passed;
     char *path=path_passed; 
@@ -156,7 +156,11 @@ int DownloadOnlyHeadersForContentLength(char *domain_passed,char *path_passed){
     
     struct sockaddr_in server_addr;
     struct hostent *he;
-   
+    SSL_library_init();//initialize the all the ssl libraries
+    SSL_load_error_strings();
+    OpenSSL_add_all_algorithms();
+
+    SSL_CTX *ctx = SSL_CTX_new(SSLv23_client_method());
     he = gethostbyname(domain);
     if (he == NULL){
        herror("gethostbyname");
@@ -168,7 +172,7 @@ int DownloadOnlyHeadersForContentLength(char *domain_passed,char *path_passed){
        exit(1);
     }
     server_addr.sin_family = AF_INET;     
-    server_addr.sin_port = htons(80);
+    server_addr.sin_port = htons(PORT_NUMBER);
     server_addr.sin_addr = *((struct in_addr *)he->h_addr);
     bzero(&(server_addr.sin_zero),8); 
 
@@ -177,16 +181,33 @@ int DownloadOnlyHeadersForContentLength(char *domain_passed,char *path_passed){
        perror("Connect");
        exit(1); 
     }
+    SSL *ssl = SSL_new(ctx);
+        if (!ssl) {
+        fprintf(stderr, "SSL_new failed.\n");
+        return ;
+    }
+
+    SSL_set_fd(ssl, sock);//link socket to ssl
+
+    if (SSL_connect(ssl) != 1) {
+        fprintf(stderr, "SSL_connect failed.\n");
+        return ;
+    }
     snprintf(send_data, sizeof(send_data), "HEAD /%s HTTP/1.1\r\nHost: %s\r\n\r\n", path, domain);
     printf("++++++++++++++++++++++++++++++++head request+++++++++++++++++++++++++++++\n");
     printf("%s\n",send_data);
-    if(send(sock, send_data, strlen(send_data), 0)==-1){
-        perror("send");
-        exit(2); 
+    // if(send(sock, send_data, strlen(send_data), 0)==-1){//for http only with no ssl
+    //     perror("send");
+    //     exit(2); 
+    // }
+     if (SSL_write(ssl, send_data, strlen(send_data)) <= 0) {
+        fprintf(stderr, "SSL_write failed.\n");
+        return 1;
     }
     printf("++++++++++++++++++++++++++++++++HEAD request sent.+++++++++++++++++++++++++++++++++++\n");  
     printf("++++++++++++++++++++++++++++++++output of head request+++++++++++++++++++++++++++++\n");
-    while(bytes_received = recv(sock, ptr, 1, 0)){
+    // while(bytes_received = recv(sock, ptr, 1, 0)){//for http only with no ssl
+  while ((bytes_received = SSL_read(ssl, ptr, 1)) > 0) {
         if(bytes_received==-1){
             perror("Parse Header");
             exit(1);
@@ -211,7 +232,10 @@ int DownloadOnlyHeadersForContentLength(char *domain_passed,char *path_passed){
         }else
             bytes_received=-1; //unknown size
     }
-    
+    SSL_shutdown(ssl);
+    SSL_free(ssl);
+    SSL_CTX_free(ctx);
+    close(sock);
     return  bytes_received ;
 
 }
@@ -220,7 +244,7 @@ int DownloadOnlyHeadersForContentLength(char *domain_passed,char *path_passed){
 
 
 
-int createSocket(char *domain_passed,char *path_passed){
+int createSocket(char *domain_passed,char *path_passed){//create a socket on portnumber specified in #define (443) and connect to server and return socket
 char *domain = domain_passed;
 char *path=path_passed; 
 
@@ -251,13 +275,13 @@ char *path=path_passed;
     }
     return sock;
 }
-void runHttp(int sock,char *domain_passed,char *path_passed,char *outputfile,int rangestart,int rangeend){
+void runHttps(int sock,char *domain_passed,char *path_passed,char *outputfile,int rangestart,int rangeend){//create the https(tcp+tls) and send the request to server and get response and save it to file name passed 
     char *domain = domain_passed;
     char *path=path_passed; 
     char send_data[1024],recv_data[1024];
     int bytes_received;  
 
-    SSL_library_init();
+    SSL_library_init();//initialize the all the ssl libraries
     SSL_load_error_strings();
     OpenSSL_add_all_algorithms();
     SSL_CTX *ctx = SSL_CTX_new(SSLv23_client_method());
@@ -266,7 +290,7 @@ void runHttp(int sock,char *domain_passed,char *path_passed,char *outputfile,int
         fprintf(stderr, "SSL_new failed.\n");
         return ;
     }
-    SSL_set_fd(ssl, sock);
+    SSL_set_fd(ssl, sock);//link socket to ssl
 
     if (SSL_connect(ssl) != 1) {
         fprintf(stderr, "SSL_connect failed.\n");
@@ -291,7 +315,7 @@ void runHttp(int sock,char *domain_passed,char *path_passed,char *outputfile,int
 
     int contentlengh;
 
-    if(ReadHttpStatus(ssl) && (contentlengh=ParseHeader(ssl))){
+    if(ReadHttpsStatus(ssl) && (contentlengh=ParseHeader(ssl))){
 
         int bytes=0;
         FILE* fd=fopen(outputfile,"wb");
@@ -320,7 +344,7 @@ void runHttp(int sock,char *domain_passed,char *path_passed,char *outputfile,int
     printf("done saving the data of  http get request to server range %d and %d ...\n",rangestart,rangeend);
    
 }
-void *wrapperThreadFunction(void *args){
+void *wrapperThreadFunction(void *args){//wrapper function is used so to wrap socket and https request so that it can be passed to pthread
     struct ThreadArgs *threadArgs = (struct ThreadArgs *)args;
     char *domain=threadArgs->domain;
     char *path=threadArgs->path;
@@ -329,31 +353,29 @@ void *wrapperThreadFunction(void *args){
     int rangeend=threadArgs->rangeend;
     // printf("values =========================================================domaain %s,filename %s ,rangeest %d,rangedn %d\n",domain,filename,rangest,rangeend);
     int mainsock1=createSocket(domain,path);
-    runHttp(mainsock1,domain,path,filename,rangest,rangeend);//download the first few pieces into files
+    runHttps(mainsock1,domain,path,filename,rangest,rangeend);//download the pieces into files by creating https connection (tcp+tls)
     close(mainsock1);
     pthread_exit(NULL);
 }
 //******************************************************main socket code end*********************************************************************//
 //*****************************************************handling input***********************************************************************//
 
-void splitUrl(const char *url, char **hostName, char **path) {
-    // Find the position of the first "/" after "://"
+void splitUrl(const char *url, char **hostName, char **path) {//used to split and parse the full and store them in hostname and path variable addresses
+   
     char *slashPtr = strstr(url, "://");
     
     if (slashPtr != NULL) {
-        slashPtr += 3; // Move past "://"
+        slashPtr += 3; 
         char *pathPtr = strchr(slashPtr, '/');
         
         if (pathPtr != NULL) {
-            // Calculate the length of the host name and path
+     
             size_t hostNameLength = pathPtr - slashPtr;
             size_t pathLength = strlen(pathPtr);
-            
-            // Allocate memory for the host name and path
+   
             *hostName = (char *)malloc(hostNameLength + 1);
             *path = (char *)malloc(pathLength + 1);
-            
-            // Copy the host name and path
+
             strncpy(*hostName, slashPtr, hostNameLength);
             (*hostName)[hostNameLength] = '\0';
             
@@ -362,7 +384,7 @@ void splitUrl(const char *url, char **hostName, char **path) {
     }
 }
 
-void setInputsFromArguementsPassed(int argc,char **argv,char **domain,char **path,char *outputfile,int *number_of_parts){
+void setInputsFromArguementsPassed(int argc,char **argv,char **domain,char **path,char *outputfile,int *number_of_parts){//parsing the input passed by user
 for(int i=0;i<argc;i++){
 if(strcmp(argv[i],"-u")==0)
 {
@@ -388,7 +410,7 @@ continue;
 
 //*****************************************************handling input end***********************************************************************//
 //*****************************************************calculating md5 *************************************************************************//
-int calculateFileMD5(const char *filename, unsigned char *digest) {
+int calculateFileMD5(const char *filename, unsigned char *digest) {//calculate md5 to validate the file values
     FILE *file = fopen(filename, "rb");
     if (!file) {
         perror("Error opening file");
@@ -415,36 +437,41 @@ int calculateFileMD5(const char *filename, unsigned char *digest) {
 //*****************************************************calculating md5 end *************************************************************************//
 int main(int argc, char *argv[] ){
     
-    char *domain = "cobweb.cs.uga.edu", *path="/~perdisci/CSCI6760-F21/Project2-TestFiles/story_hairydawg_UgaVII.jpg";
-    char *filename="part_";
+    char *domain = "cobweb.cs.uga.edu", *path="/~perdisci/CSCI6760-F21/Project2-TestFiles/story_hairydawg_UgaVII.jpg";//default domain,path if nothing is given by user
+    char *filename="part_";//default filename for parts if nothing is given by user
     char outputfile[50];
-    strcpy(outputfile, "fullstichedimage.jpg");
+    strcpy(outputfile, "fullstichedimage.jpg");//default outputfile if nothing is given by user
     int number_of_parts=5;
-    setInputsFromArguementsPassed(argc,argv,&domain,&path,outputfile,&number_of_parts);
-    
+
+    setInputsFromArguementsPassed(argc,argv,&domain,&path,outputfile,&number_of_parts);//parse the input passed by user
+
+    //+++++++++++++++++++++++++find the length by creating a https(tcp+tls connection) request to server+++++++++++++++++++++++++++++++++++++//
     char filenames[number_of_parts][256];
-    // int mainsock0=createSocket(domain,path);
+    // int mainsock0=createSocket(domain,path);//initial code for testing
     int contentlength=DownloadOnlyHeadersForContentLength(domain,path);
-    // close(mainsock0
+    // close(mainsock0)//initial code for testing
     printf("Content-Length= %d\n",contentlength);
+    //+++++++++++++++++++++++++find the length by creating a https(tcp+tls connection) request to server end+++++++++++++++++++++++++++++++++++++//
     printf("each partsize is %d\n",contentlength/number_of_parts);
-    int sizeofeachchunk=contentlength/number_of_parts;
+    int sizeofeachchunk=contentlength/number_of_parts;//calclating approx size of each file
     int rangest=0;
     int rangeend=sizeofeachchunk;
     int count=1;
-    pthread_t thread[number_of_parts];
-    struct ThreadArgs args[number_of_parts];
+    
+    //++++++++++++++++++++++++++++++++++++++++++++++++++creating threads and sending https requests and downloading the contect and saving to files++++++++++++++++++++++++++++++++++++++++++++++++++//
+    pthread_t thread[number_of_parts];//creating threads
+    struct ThreadArgs args[number_of_parts];//creating a variable to use for passing to function during execution of threads since we cannot directly pass arguments to thread function
     while(count<number_of_parts){
         strcpy(filenames[count-1], concatenateStrings(filename, integerToString(count)));//create the file name
-        // int mainsock1=createSocket(domain,path);
+        // int mainsock1=createSocket(domain,path);//initial code for testing
         // runHttp(mainsock1,domain,path,filenames[count-1],rangest,rangeend);//download the first few pieces into files
         // close(mainsock1);
-        args[count-1].domain=domain;
-        args[count-1].path=path;
-        args[count-1].smalleroutputfile=filenames[count-1];
-        args[count-1].rangest=rangest;
-        args[count-1].rangeend=rangeend;
-        // printf("++++++++++++++++++++++++++++++++++++domain %s ,filename %s, rangest %d ,rangedn %d \n",args.domain,args.smalleroutputfile,args.rangest,args.rangeend);
+        args[count-1].domain=domain;//setting the domain for each https request 
+        args[count-1].path=path;//setting the domain for each https request 
+        args[count-1].smalleroutputfile=filenames[count-1];//setting the domain for each https request 
+        args[count-1].rangest=rangest;//setting the domain for each https request 
+        args[count-1].rangeend=rangeend;//setting the domain for each https request 
+        // printf("++++++++++++++++++++++++++++++++++++domain %s ,filename %s, rangest %d ,rangedn %d \n",args.domain,args.smalleroutputfile,args.rangest,args.rangeend);//added this print to check the inputs passed during debugging
         if (pthread_create(&thread[count-1], NULL, wrapperThreadFunction, &args[count-1]) != 0) {//create the thread
             fprintf(stderr, "Failed to create thread.\n");
             return 1;
@@ -457,45 +484,50 @@ int main(int argc, char *argv[] ){
     
     int mainsock2=createSocket(domain,path);
     strcpy(filenames[count-1], concatenateStrings(filename, integerToString(count)));
-    runHttp(mainsock2,domain,path,filenames[count-1],rangest,contentlength);//in the last run download everything
+    runHttps(mainsock2,domain,path,filenames[count-1],rangest,contentlength);//in the last run download everything  on the main thread itself
     close(mainsock2);
-
+ //++++++++++++++++++++++++++++++++++++++++++++++++++creating threads and sending https requests and downloading the contect and saving to files  end++++++++++++++++++++++++++++++++++++++++++++++++++//
+    //++++++++++++++++++++++++++++++++++++++++++++++waiting for threads to finish++++++++++++++++++++++++++++++++++//
     for(int i=0;i<number_of_parts-1;i++){
         pthread_join(thread[i], NULL);
     }
     printf("\n\n");
-    
+    //++++++++++++++++++++++++++++++++++++++++++++++waiting for threads to finish end++++++++++++++++++++++++++++++++++//
+    //++++++++++++++++++++++++++++++++++++++++++++++running of threads finished so all files have been downloaded so merge the files next ++++++++++++++++++++++++++++++++++//
     for(int i=0;i<number_of_parts;i++){
         
         appendToEndOfOutputFile(filenames[i], outputfile);
         printf("%s is merge to the output\n",filenames[i]);
     }
-    printf("\n\n");
+    printf("\n\noutput file has created by merging all the files\n\n");
+     //++++++++++++++++++++++++++++++++++++++++++++++running of threads finished so all files have been downloaded so merge the files end++++++++++++++++++++++++++++++++++//
+    //++++++++++++++++++++++++++++++++++++++++++++++++files have been merged to final output file so now calculate the md5 to verify+++++++++++++++++++++++++++++++++++++//
     printf("======================================================================\n");
     unsigned char digest[MD5_DIGEST_LENGTH];
     if (calculateFileMD5(outputfile, digest) == 0) {
         printf("MD5 Hash of %s: ", outputfile);
         for (int i = 0; i < MD5_DIGEST_LENGTH; i++) {
-            printf("%02x", digest[i]);
+            printf("%02x", digest[i]);//print the md5 calculated to screen
         }
         printf("\n");
     }
     printf("======================================================================\n\n");
+        //++++++++++++++++++++++++++++++++++++++++++++++++files have been merged to final output file so now calculate the md5 to verify end+++++++++++++++++++++++++++++++++++++//
     // printf("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++1\n");
     // int mainsock1=createSocket(domain,path);
-    // runHttp(mainsock1,domain,path,concatenateStrings(filename, atoa(1)),rangestart,rangeend);
+    // runHttp(mainsock1,domain,path,concatenateStrings(filename, atoa(1)),rangestart,rangeend);//initial code for testing
     // close(mainsock1);
     // printf("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++2\n");
     // int mainsock2=createSocket(domain,path);
-    // runHttp(mainsock2,domain,path,concatenateStrings(filename, atoa(2)),rangeend+1,rangeend+30001);
+    // runHttp(mainsock2,domain,path,concatenateStrings(filename, atoa(2)),rangeend+1,rangeend+30001);//initial code for testing
     // close(mainsock2);
     // printf("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++3\n");
     
-    // runHttp(domain,path,outputfile3,rangestart,rangeend+2001);
-    // mergefiles(outputfile1,outputfile2,"merge.jpg");
+    // runHttp(domain,path,outputfile3,rangestart,rangeend+2001);//initial code for testing
+    // mergefiles(outputfile1,outputfile2,"merge.jpg");//initial code for testing
     // mergeFiles(outputfile1,outputfile2,outputfile3);
-    // appendToEndOfOutputFile(concatenateStrings(filename, atoa(1)), outputfile);    
-    // appendToEndOfOutputFile(concatenateStrings(filename, atoa(2)), outputfile);
+    // appendToEndOfOutputFile(concatenateStrings(filename, atoa(1)), outputfile);    //initial code for testing
+    // appendToEndOfOutputFile(concatenateStrings(filename, atoa(2)), outputfile);//initial code for testing
     
     return 0;
 }
