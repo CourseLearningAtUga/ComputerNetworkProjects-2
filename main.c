@@ -81,12 +81,12 @@ int ReadHttpStatus(SSL *ssl){
     char c;
     char buff[1024]="",*ptr=buff+1;
     int bytes_received, status;
-    printf("Begin Response ++++++1..\n");
-    // while(bytes_received = recv(sock, ptr, 1, 0)){
+    printf("Begin of https Response ..\n");
+    // while(bytes_received = recv(sock, ptr, 1, 0)){//for http only with no ssl
     while(bytes_received = SSL_read(ssl, ptr, 1)){
-        printf("Begin Response ++++++2..\n");
+
         if(bytes_received==-1){
-            perror("ReadHttpStatus");
+            perror("ReadHttpsStatus");
             exit(1);
         }
 
@@ -100,7 +100,7 @@ int ReadHttpStatus(SSL *ssl){
 
     printf("%s\n",ptr);
     printf("status=%d\n",status);
-    printf("End Response ..\n");
+    printf("End https Response ..\n");
     return (bytes_received>0)?status:0;
 
 }
@@ -111,7 +111,7 @@ int ParseHeader(SSL *ssl){
     char buff[1024]="",*ptr=buff+4;
     int bytes_received, status;
     printf("Begin HEADER ..\n");
-    // while(bytes_received = recv(sock, ptr, 1, 0)){
+    // while(bytes_received = recv(sock, ptr, 1, 0)){//for http only with no ssl
         while(bytes_received = SSL_read(ssl, ptr, 1)){
         
         if(bytes_received==-1){
@@ -276,7 +276,7 @@ void runHttp(int sock,char *domain_passed,char *path_passed,char *outputfile,int
 
     snprintf(send_data, sizeof(send_data), "GET /%s HTTP/1.1\r\nHost: %s\r\nRange: bytes=%d-%d\r\n\r\n", path, domain,rangestart,rangeend);
 
-    // if(send(sock, send_data, strlen(send_data), 0)==-1){
+    // if(send(sock, send_data, strlen(send_data), 0)==-1){//for http only with no ssl
     //     perror("send");
     //     exit(2); 
     // }
@@ -297,15 +297,13 @@ void runHttp(int sock,char *domain_passed,char *path_passed,char *outputfile,int
         FILE* fd=fopen(outputfile,"wb");
         printf("Saving data...\n\n");
 
-        // while(bytes_received = recv(sock, recv_data, 1024, 0)){
+        // while(bytes_received = recv(sock, recv_data, 1024, 0)){//for http only with no ssl
         while ((bytes_received = SSL_read(ssl, recv_data, sizeof(recv_data))) > 0) {
             if(bytes_received==-1){
                 perror("recieve");
                 exit(3);
             }
-            printf("\n");
-            printf("recv===%s\n",recv_data);
-            printf("\n");
+           
             fwrite(recv_data,1,bytes_received,fd);
             bytes+=bytes_received;
             // printf("Bytes recieved: %d from %d\n",bytes,contentlengh);
