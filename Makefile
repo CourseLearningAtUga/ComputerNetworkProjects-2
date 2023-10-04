@@ -1,13 +1,8 @@
-all: http_downloader
-	./http_downloader
-
-http_downloader: main.o 
-	cc -o http_downloader main.o
-
-main.o: main.c
-	cc -c main.c -o main.o 
+http_downloader: main.c
+	cc -o http_downloader main.c -lssl -lcrypto 
 
 clean:
-	rm -rf http_downloader main.o
-	rm *.jpg
+	rm -rf http_downloader
+	rm part_*
+	rm *.jpg *.gif
 	rm part_*

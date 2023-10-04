@@ -184,14 +184,14 @@ int DownloadOnlyHeadersForContentLength(char *domain_passed,char *path_passed){/
     SSL *ssl = SSL_new(ctx);
         if (!ssl) {
         fprintf(stderr, "SSL_new failed.\n");
-        return ;
+        return -1;
     }
 
     SSL_set_fd(ssl, sock);//link socket to ssl
 
     if (SSL_connect(ssl) != 1) {
         fprintf(stderr, "SSL_connect failed.\n");
-        return ;
+        return -1;
     }
     snprintf(send_data, sizeof(send_data), "HEAD /%s HTTP/1.1\r\nHost: %s\r\n\r\n", path, domain);
     printf("++++++++++++++++++++++++++++++++head request+++++++++++++++++++++++++++++\n");
