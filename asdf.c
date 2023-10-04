@@ -6,6 +6,26 @@
 #include <netdb.h>
 #include <unistd.h>
 
+// Function to parse URL into hostname and path
+void parseURL(const char *url, char **hostname, char **path) {
+    *hostname = NULL;
+    *path = NULL;
+
+    // Skip "https://"
+    if (strncmp(url, "https://", 8) == 0) {
+        url += 8;
+    }
+
+    char *slash = strchr(url, '/');
+    if (slash) {
+        *hostname = strndup(url, slash - url);
+        *path = strdup(slash + 1);
+    } else {
+        *hostname = strdup(url);
+        *path = strdup("");
+    }
+}
+
 int main(int argc, char *argv[]) {
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <URL>\n", argv[0]);
@@ -30,20 +50,8 @@ int main(int argc, char *argv[]) {
     char *hostname;
     char *path;
 
-    // Parse the URL to extract hostname and path
-    if (strncmp(url, "https://", 8) == 0) {
-        url += 8; // Skip "https://"
-    }
-
-    char *slash = strchr(url, '/');
-    if (slash) {
-        *slash = '\0'; // Split hostname and path
-        hostname = url;
-        path = slash + 1;
-    } else {
-        hostname = url;
-        path = "";
-    }
+    // Parse the URL
+    parseURL(url, &hostname, &path);
 
     host = gethostbyname(hostname);
     if (!host) {
@@ -87,18 +95,22 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "SSL_write failed.\n");
         return 1;
     }
-    FILE *fd=fopen("temp.txt", "wb");
+
     // Read and print the response
     char response[4096];
     int bytes_received;
     while ((bytes_received = SSL_read(ssl, response, sizeof(response))) > 0) {
-        fwrite(response, 1, bytes_received, fd);
+        fwrite(response, 1, bytes_received, stdout);
     }
-    fclose(fd);
+
     SSL_shutdown(ssl);
     SSL_free(ssl);
     SSL_CTX_free(ctx);
     close(sock);
+
+    // Free memory allocated for hostname and path
+    free(hostname);
+    free(path);
 
     return 0;
 }

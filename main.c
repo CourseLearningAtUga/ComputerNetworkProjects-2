@@ -11,8 +11,10 @@
 #include <pthread.h>
 #include <string.h>
 #include <openssl/md5.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 
-#define PORT_NUMBER 80
+#define PORT_NUMBER 443
 //*****************************************************helper structures **************************************************//
 struct ThreadArgs {    
     char *domain; // Pointer to a string
@@ -75,12 +77,14 @@ char* concatenateStrings(const char *str1, const char *str2) {
 
 //*****************************************************helpler functions end*************************************************//
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++helper socket functions***********************************************//
-int ReadHttpStatus(int sock){
+int ReadHttpStatus(SSL *ssl){
     char c;
     char buff[1024]="",*ptr=buff+1;
     int bytes_received, status;
-    printf("Begin Response ..\n");
-    while(bytes_received = recv(sock, ptr, 1, 0)){
+    printf("Begin Response ++++++1..\n");
+    // while(bytes_received = recv(sock, ptr, 1, 0)){
+    while(bytes_received = SSL_read(ssl, ptr, 1)){
+        printf("Begin Response ++++++2..\n");
         if(bytes_received==-1){
             perror("ReadHttpStatus");
             exit(1);
@@ -102,12 +106,14 @@ int ReadHttpStatus(int sock){
 }
 
 //the only filed that it parsed is 'Content-Length' 
-int ParseHeader(int sock){
+int ParseHeader(SSL *ssl){
     char c;
     char buff[1024]="",*ptr=buff+4;
     int bytes_received, status;
     printf("Begin HEADER ..\n");
-    while(bytes_received = recv(sock, ptr, 1, 0)){
+    // while(bytes_received = recv(sock, ptr, 1, 0)){
+        while(bytes_received = SSL_read(ssl, ptr, 1)){
+        
         if(bytes_received==-1){
             perror("Parse Header");
             exit(1);
@@ -138,11 +144,39 @@ int ParseHeader(int sock){
     return  bytes_received ;
 
 }
-int DownloadOnlyHeadersForContentLength(int sock,char *domain_passed,char *path_passed){
+// int DownloadOnlyHeadersForContentLength(int sock,char *domain_passed,char *path_passed){
+int DownloadOnlyHeadersForContentLength(char *domain_passed,char *path_passed){
     char c,send_data[1024],buff[1024]="",*ptr=buff+4;
     char *domain = domain_passed;
     char *path=path_passed; 
     int bytes_received, status;
+    
+
+    int sock;
+    
+    struct sockaddr_in server_addr;
+    struct hostent *he;
+   
+    he = gethostbyname(domain);
+    if (he == NULL){
+       herror("gethostbyname");
+       exit(1);
+    }
+
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0))== -1){
+       perror("Socket");
+       exit(1);
+    }
+    server_addr.sin_family = AF_INET;     
+    server_addr.sin_port = htons(80);
+    server_addr.sin_addr = *((struct in_addr *)he->h_addr);
+    bzero(&(server_addr.sin_zero),8); 
+
+    printf("Connecting ...\n");
+    if (connect(sock, (struct sockaddr *)&server_addr,sizeof(struct sockaddr)) == -1){
+       perror("Connect");
+       exit(1); 
+    }
     snprintf(send_data, sizeof(send_data), "HEAD /%s HTTP/1.1\r\nHost: %s\r\n\r\n", path, domain);
     printf("++++++++++++++++++++++++++++++++head request+++++++++++++++++++++++++++++\n");
     printf("%s\n",send_data);
@@ -222,34 +256,56 @@ void runHttp(int sock,char *domain_passed,char *path_passed,char *outputfile,int
     char *path=path_passed; 
     char send_data[1024],recv_data[1024];
     int bytes_received;  
+
+    SSL_library_init();
+    SSL_load_error_strings();
+    OpenSSL_add_all_algorithms();
+    SSL_CTX *ctx = SSL_CTX_new(SSLv23_client_method());
+    SSL *ssl = SSL_new(ctx);
+    if (!ssl) {
+        fprintf(stderr, "SSL_new failed.\n");
+        return ;
+    }
+    SSL_set_fd(ssl, sock);
+
+    if (SSL_connect(ssl) != 1) {
+        fprintf(stderr, "SSL_connect failed.\n");
+        return ;
+    }
     printf("Sending http get request to server range %d and %d ...\n",rangestart,rangeend);
 
     snprintf(send_data, sizeof(send_data), "GET /%s HTTP/1.1\r\nHost: %s\r\nRange: bytes=%d-%d\r\n\r\n", path, domain,rangestart,rangeend);
 
-    if(send(sock, send_data, strlen(send_data), 0)==-1){
-        perror("send");
-        exit(2); 
+    // if(send(sock, send_data, strlen(send_data), 0)==-1){
+    //     perror("send");
+    //     exit(2); 
+    // }
+    if (SSL_write(ssl, send_data, strlen(send_data)) <= 0) {
+        fprintf(stderr, "SSL_write failed.\n");
+        return ;
     }
-    printf("http request sent for range.%d and %d ...\n",rangestart,rangeend);  
+    printf("https request sent for range.%d and %d ...\n",rangestart,rangeend);  
 
     //fp=fopen("received_file","wb");
     printf("Recieving http get request to server range %d and %d ...\n",rangestart,rangeend);
 
     int contentlengh;
 
-    if(ReadHttpStatus(sock) && (contentlengh=ParseHeader(sock))){
+    if(ReadHttpStatus(ssl) && (contentlengh=ParseHeader(ssl))){
 
         int bytes=0;
         FILE* fd=fopen(outputfile,"wb");
         printf("Saving data...\n\n");
 
-        while(bytes_received = recv(sock, recv_data, 1024, 0)){
+        // while(bytes_received = recv(sock, recv_data, 1024, 0)){
+        while ((bytes_received = SSL_read(ssl, recv_data, sizeof(recv_data))) > 0) {
             if(bytes_received==-1){
                 perror("recieve");
                 exit(3);
             }
-
-            
+            printf("\n");
+            printf("recv===%s\n",recv_data);
+            printf("\n");
             fwrite(recv_data,1,bytes_received,fd);
             bytes+=bytes_received;
             // printf("Bytes recieved: %d from %d\n",bytes,contentlengh);
@@ -258,7 +314,9 @@ void runHttp(int sock,char *domain_passed,char *path_passed,char *outputfile,int
         }
         fclose(fd);
     }
-
+    SSL_shutdown(ssl);
+    SSL_free(ssl);
+    SSL_CTX_free(ctx);
     
     
     printf("done saving the data of  http get request to server range %d and %d ...\n",rangestart,rangeend);
@@ -367,9 +425,9 @@ int main(int argc, char *argv[] ){
     setInputsFromArguementsPassed(argc,argv,&domain,&path,outputfile,&number_of_parts);
     
     char filenames[number_of_parts][256];
-    int mainsock0=createSocket(domain,path);
-    int contentlength=DownloadOnlyHeadersForContentLength(mainsock0,domain,path);
-    close(mainsock0);
+    // int mainsock0=createSocket(domain,path);
+    int contentlength=DownloadOnlyHeadersForContentLength(domain,path);
+    // close(mainsock0
     printf("Content-Length= %d\n",contentlength);
     printf("each partsize is %d\n",contentlength/number_of_parts);
     int sizeofeachchunk=contentlength/number_of_parts;
