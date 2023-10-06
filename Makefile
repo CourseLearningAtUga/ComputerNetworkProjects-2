@@ -1,4 +1,4 @@
-http_downloader: main.c
+all: main.c
 	cc -o http_downloader main.c -lssl -lcrypto 
 
 clean:
