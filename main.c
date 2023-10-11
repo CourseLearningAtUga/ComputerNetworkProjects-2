@@ -26,6 +26,7 @@ struct ThreadArgs {
     int rangest;
     int rangeend;
 };
+struct hostent *globalhe;
 //****************************************************helper structures end************************************************//
 
 //*****************************************************helpler functions *************************************************//
@@ -253,7 +254,8 @@ char *path=path_passed;
     struct sockaddr_in server_addr;
     struct hostent *he;
    
-    he = gethostbyname(domain);
+    //he = gethostbyname(domain);//commented this sending multiple gethostbyname request leads to denial by server for some reason
+    he=globalhe;
     if (he == NULL){
        herror("gethostbyname");
        exit(1);
@@ -457,7 +459,7 @@ int main(int argc, char *argv[] ){
     int rangest=0;
     int rangeend=sizeofeachchunk;
     int count=1;
-    
+	globalhe= gethostbyname(domain);//setting globalhe so that dont have to get hostname multiple times   
     //++++++++++++++++++++++++++++++++++++++++++++++++++creating threads and sending https requests and downloading the contect and saving to files++++++++++++++++++++++++++++++++++++++++++++++++++//
     pthread_t thread[number_of_parts];//creating threads
     struct ThreadArgs args[number_of_parts];//creating a variable to use for passing to function during execution of threads since we cannot directly pass arguments to thread function
