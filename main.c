@@ -194,7 +194,7 @@ int DownloadOnlyHeadersForContentLength(char *domain_passed,char *path_passed){/
         fprintf(stderr, "SSL_connect failed.\n");
         return -1;
     }
-    snprintf(send_data, sizeof(send_data), "HEAD /%s HTTP/1.1\r\nHost: %s\r\n\r\n", path, domain);
+    snprintf(send_data, sizeof(send_data), "HEAD /%s HTTP/1.1\r\nHost: %s\r\nUser-Agent: vishal\r\n\r\n", path, domain);
     printf("++++++++++++++++++++++++++++++++head request+++++++++++++++++++++++++++++\n");
     printf("%s\n",send_data);
     // if(send(sock, send_data, strlen(send_data), 0)==-1){//for http only with no ssl
@@ -300,7 +300,7 @@ void runHttps(int sock,char *domain_passed,char *path_passed,char *outputfile,in
     }
     printf("Sending http get request to server range %d and %d ...\n",rangestart,rangeend);
 
-    snprintf(send_data, sizeof(send_data), "GET /%s HTTP/1.1\r\nHost: %s\r\nRange: bytes=%d-%d\r\n\r\n", path, domain,rangestart,rangeend);
+    snprintf(send_data, sizeof(send_data), "GET /%s HTTP/1.1\r\nHost: %s\r\nUser-Agent:vishal\r\nRange: bytes=%d-%d\r\n\r\n", path, domain,rangestart,rangeend);
 
     // if(send(sock, send_data, strlen(send_data), 0)==-1){//for http only with no ssl
     //     perror("send");
